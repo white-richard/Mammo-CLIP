@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #$ -N b5_det_upmc_ddp        # Give job a name
-#$ -o /restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/scc_logs/pretrain/fold0_b5_det_$JOB_ID_$JOB_NAME.out       # File name for the stdout output of the job.
+#$ -o /Mammo-CLIP/src/scc_logs/pretrain/fold0_b5_det_$JOB_ID_$JOB_NAME.out       # File name for the stdout output of the job.
 
 #$ -P batmanlab     # Specify the SCC project name you want to use
 #$ -l h_rt=48:00:00  # Specify the hard time limit for the job
@@ -18,7 +18,7 @@ hostname
 date
 
 CURRENT=$(date +"%Y-%m-%d_%T")
-slurm_output_train1=/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/scc_logs/pretrain/fold0_b5_det_$CURRENT_$JOB_NAME.out
+slurm_output_train1=/Mammo-CLIP/src/scc_logs/pretrain/fold0_b5_det_$CURRENT_$JOB_NAME.out
 
 echo $CURRENT
 echo  Mammo-clip
@@ -28,7 +28,7 @@ module load miniconda/23.1.0
 module load python3/3.8
 conda activate breast_clip_rtx_6000
 
-torchrun --nproc_per_node=4 /restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/train.py \
+torchrun --nproc_per_node=4 /Mammo-CLIP/src/codebase/train.py \
  --config-name pre_train_b5_clip.yaml >$slurm_output_train1
 
 

@@ -51,7 +51,7 @@ class ImageTextDataset(Dataset):
         self.image_view_aug = True
         self.has_backtranslated = hasattr(self.df, "text_augment")
         with open(
-                "/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/breastclip/data/datasets/prompts.json"
+                "/Mammo-CLIP/src/codebase/breastclip/data/datasets/prompts.json"
         ) as f:
             self.prompt_json = json.load(f)
 

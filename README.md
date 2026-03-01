@@ -146,7 +146,7 @@ skip the preprocessing steps.
 ```bash
 python ./src/preprocessing/preprocess_image_to_png_kaggle.py \
   --phase="test" \
-  --base_folder="/restricted/projectnb/batmanlab/shawn24/PhD/RSNA_Breast_Imaging/Dataset/RSNA_Cancer_Detection"
+  --base_folder="/RSNA_Breast_Imaging/Dataset/RSNA_Cancer_Detection"
 ```
 
 ### convert to png: VinDr
@@ -154,7 +154,7 @@ python ./src/preprocessing/preprocess_image_to_png_kaggle.py \
 ```bash
 python ./src/preprocessing/preprocess_image_to_png_vindr.py \
   --phase="test" \
-  --base_folder="/restricted/projectnb/batmanlab/shawn24/PhD/RSNA_Breast_Imaging/Dataset/External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0"
+  --base_folder="/RSNA_Breast_Imaging/Dataset/External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0"
 ```
 
 ## Data preparation for pretraining
@@ -179,7 +179,7 @@ python ./src/preprocessing/preprocess_image_to_png_vindr.py \
 # output: clip_pretrain_100.csv
 
 python ./src/codebase/augment_text.py \
-  --dataset-path="/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/data_csv" \
+  --dataset-path="/Mammo-CLIP/src/codebase/data_csv" \
   --csv-path="upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv" \
   --dataset="upmc" 
 ```
@@ -191,7 +191,7 @@ details.
 4. The csv file of the final image-text dataset should have the following format:
 
 | index | patient_id | laterality              | image                                                   | view                                                                         | CC                                                              | MLO                                                              | text                           | text_augment                                       |
-|-------|------------|-------------------------|---------------------------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------|------------------------------------------------------------------|--------------------------------|----------------------------------------------------|
+| ----- | ---------- | ----------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------ | -------------------------------------------------- |
 | 0     | patient_id | laterality ('R' or 'L') | List of all image_paths for patient_id-laterality combo | List of views for patient_id-laterality combo (only 'CC' and 'MLO' are used) | List of image paths for CC view for patient_id-laterality combo | List of image paths for MLO view for patient_id-laterality combo | List of [findings, impression] | List of [augmented findings, augmented impression] |
 
 5. The final sample csv file as the output of `step3` is
@@ -229,7 +229,7 @@ image-label variant of Mammo-CLIP.**
 The csv file of the final image-label (VinDr) dataset should have the following format:
 
 | index | patient_id | laterality              | image                                                   | view                                                                         | CC                                                                                | MLO                                                                                  | CC_FINDING                                                               | MLO_FINDING                                                               |
-|-------|------------|-------------------------|---------------------------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| ----- | ---------- | ----------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | 0     | patient_id | laterality ('R' or 'L') | List of all image_paths for patient_id-laterality combo | List of views for patient_id-laterality combo (only 'CC' and 'MLO' are used) | List of image paths for CC view for patient_id-laterality combo, e.g, [CC_img ..] | List of image paths for MLO view for patient_id-laterality combo, e.g, [MLO_img .. ] | Findings per image per laterality for CC view (see below for the format) | Findings per image per laterality for MLO view (see below for the format) |
 
 **Explanation for CC_FINDING and MLO_FINDING Columns:**
@@ -264,9 +264,9 @@ as:
 Use the following csv files as metadata for the downstream tasks (classification, detection, zero-shot):
 
 | Dataset | CSV                                                                                                                                  |
-|---------|--------------------------------------------------------------------------------------------------------------------------------------|
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | VinDr   | [vindr_detection_v1_folds.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/vindr_detection_v1_folds.csv) |
-| RSNA    | [train_folds.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/train_folds.csv)                           | 
+| RSNA    | [train_folds.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/train_folds.csv)                           |
 
 For detection/localization tasks, we have included the coordinates of the resized bounding boxes of VinDr in the above
 csv file. Somebody interested in resizing the bounding boxes by themselves, run the following command
@@ -350,7 +350,7 @@ python ./src/preprocessing/preprocess_VinDr_detector.py
 Following are the pre-training checkpoints of Mammo-CLIP:
 
 | Model architecture | Checkpoints (Hugging Face)                                                                                                 |
-|--------------------|----------------------------------------------------------------------------------------------------------------------------|
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | Best performance   | [Efficient-Net B5](https://huggingface.co/shawn24/Mammo-CLIP/blob/main/Pre-trained-checkpoints/b5-model-best-epoch-7.tar)  |
 | Lightweight        | [Efficient-Net B2](https://huggingface.co/shawn24/Mammo-CLIP/blob/main/Pre-trained-checkpoints/b2-model-best-epoch-10.tar) |
 
@@ -416,10 +416,10 @@ Adjust the `CKPT` and `DIR` variables according to your setup.
 
 ```bash
 python ./src/codebase/train_classifier.py \
-  --data-dir '/restricted/projectnb/batmanlab/shawn24/PhD/RSNA_Breast_Imaging/Dataset' \
+  --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --data_frac 1.0 \
   --dataset 'ViNDr' \
   --arch 'upmc_breast_clip_det_b5_period_n_lp' \
@@ -455,10 +455,10 @@ python ./src/codebase/train_classifier.py \
 
 ```bash
 python ./src/codebase/train_classifier.py \
-  --data-dir '/restricted/projectnb/batmanlab/shawn24/PhD/RSNA_Breast_Imaging/Dataset' \
+  --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --data_frac 1.0 \
   --dataset 'ViNDr' \
   --arch 'upmc_breast_clip_det_b5_period_n_ft' \
@@ -494,10 +494,10 @@ python ./src/codebase/train_classifier.py \
 
 ```bash
 python ./src/codebase/train_detector.py \
-  --data-dir '/restricted/projectnb/batmanlab/shawn24/PhD/RSNA_Breast_Imaging/Dataset' \
+  --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --dataset 'ViNDr' \
   --arch 'clip_b5_upmc' \
   --epochs 120 \
@@ -532,10 +532,10 @@ python ./src/codebase/train_detector.py \
 
 ```bash
 python ./src/codebase/train_detector.py \
-  --data-dir '/restricted/projectnb/batmanlab/shawn24/PhD/RSNA_Breast_Imaging/Dataset' \
+  --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/restricted/projectnb/batmanlab/shawn24/PhD/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --dataset 'ViNDr' \
   --arch 'clip_b5_upmc' \
   --epochs 120 \
@@ -579,7 +579,7 @@ For all the training scripts, we add them in
 the [scripts](https://github.com/batmanlab/Mammo-CLIP/tree/main/src/scripts) directory:
 
 | Scripts                                                                                                                              | Purpose                                                           |
-|--------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
 | [pretrain_mammo_clip_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b5.sh)                 | Pretrain Mammo-CLIP b5 with image+text data                       |
 | [pretrain_mammo_clip_b5_ddp.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b5_ddp.sh)         | Pretrain Mammo-CLIP b5 with image+text data using multiple GPUs   |
 | [pretrain_mammo_clip_b2.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b2.sh)                 | Pretrain Mammo-CLIP b2 with image+text data                       |
