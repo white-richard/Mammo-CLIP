@@ -7,10 +7,10 @@
   <a href="https://papers.miccai.org/miccai-2024/paper/0926_paper.pdf">
     <img src="https://img.shields.io/badge/Paper-9cf" alt="Paper" />
   </a>
-  <a href="https://huggingface.co/shawn24/Mammo-CLIP/tree/main/Pre-trained-checkpoints/">
+  <a href="https://huggingface.co/shawn24tree/main/Pre-trained-checkpoints/">
     <img src="https://img.shields.io/badge/Checkpoints-Hugging%20Face-yellow" alt="Hugging Face Checkpoints" />
   </a>
-  <!-- <a href="https://github.com/batmanlab/Mammo-CLIP/blob/main/README.md#mammo-clip-checkpoints">
+  <!-- <a href="https://github.com/batmanlabblob/main/README.md#mammo-clip-checkpoints">
     <img src="https://img.shields.io/badge/Checkpoints-Google%20Drive-blue" alt="Google Drive Checkpoints" />
   </a> -->
   <a href="https://www.kaggle.com/datasets/shantanughosh/vindr-mammogram-dataset-dicom-to-png">
@@ -76,12 +76,12 @@ nltk.download('punkt_tab')
 
 After going through the instruction, it is recommended to visit the following queries logged in the issues:
 
-* [Issue-2](https://github.com/batmanlab/Mammo-CLIP/issues/2) for any further clarification on pretraining.
-* [Issue-10](https://github.com/batmanlab/Mammo-CLIP/issues/10) for getting the embeddings.
-* [Issue-6](https://github.com/batmanlab/Mammo-CLIP/issues/6) for further clarification on the downstream tasks and
+* [Issue-2](https://github.com/batmanlabissues/2) for any further clarification on pretraining.
+* [Issue-10](https://github.com/batmanlabissues/10) for getting the embeddings.
+* [Issue-6](https://github.com/batmanlabissues/6) for further clarification on the downstream tasks and
   corresponding datasets.
-* [Issue-13](https://github.com/batmanlab/Mammo-CLIP/issues/13) for setting up the baselines.
-* [Issue-9](https://github.com/batmanlab/Mammo-CLIP/issues/9) and [Issue-35](https://github.com/batmanlab/Mammo-CLIP/issues/35) for problems related to BioClinincalBert from Hugging
+* [Issue-13](https://github.com/batmanlabissues/13) for setting up the baselines.
+* [Issue-9](https://github.com/batmanlabissues/9) and [Issue-35](https://github.com/batmanlabissues/35) for problems related to BioClinincalBert from Hugging
   Face.
 
 If we hear more queries, we may add a separate FAQs in the future.
@@ -109,7 +109,7 @@ If we hear more queries, we may add a separate FAQs in the future.
 
 ## Environment Setup
 
-Use [environment.yml](https://github.com/batmanlab/Mammo-CLIP/blob/main/environment.yml) to setup the environment.
+Use [environment.yml](https://github.com/batmanlabblob/main/environment.yml) to setup the environment.
 
 ```bash
 git clone git@github.com:batmanlab/Mammo-CLIP.git
@@ -165,7 +165,7 @@ python ./src/preprocessing/preprocess_image_to_png_vindr.py \
    mammograms and texts are radiology reports. If you have access to such dataset, follow the setup here. Extract
    the `IMPRESSION` and `FINDINGS` sections from the
    report and create a csv. The sample
-   csv: [upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv)
+   csv: [upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv)
 
 2. Note the `FINDINGS` and `IMPRESSION` columns are
    used to generate the text for the image. The `HISTORY`, `FINDINGS` and `IMPRESSION` columns contains templated text
@@ -179,7 +179,7 @@ python ./src/preprocessing/preprocess_image_to_png_vindr.py \
 # output: clip_pretrain_100.csv
 
 python ./src/codebase/augment_text.py \
-  --dataset-path="/Mammo-CLIP/src/codebase/data_csv" \
+  --dataset-path="src/codebase/data_csv" \
   --csv-path="upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv" \
   --dataset="upmc" 
 ```
@@ -195,7 +195,7 @@ details.
 | 0     | patient_id | laterality ('R' or 'L') | List of all image_paths for patient_id-laterality combo | List of views for patient_id-laterality combo (only 'CC' and 'MLO' are used) | List of image paths for CC view for patient_id-laterality combo | List of image paths for MLO view for patient_id-laterality combo | List of [findings, impression] | List of [augmented findings, augmented impression] |
 
 5. The final sample csv file as the output of `step3` is
-   here: [clip_pretrain_100.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/clip_pretrain_100.csv). `clip_pretrain_100.csv`
+   here: [clip_pretrain_100.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/clip_pretrain_100.csv). `clip_pretrain_100.csv`
    is used for pretraining the image-text variant of Mammo-CLIP.
 
 ### Image-label dataset
@@ -210,19 +210,19 @@ following notebook to preprocess the VinDr dataset:
 ```
 
 When you download the VinDr dataset, you will get these two csv
-files: [breast-level_annotations.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/breast-level_annotations.csv)
-and [finding_annotations.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/finding_annotations.csv)
+files: [breast-level_annotations.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/breast-level_annotations.csv)
+and [finding_annotations.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/finding_annotations.csv)
 . We preprocess the `finding_annotations.csv` file to
-get [vindr_detection_v1_folds.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/vindr_detection_v1_folds.csv)
-. [VinDr.ipynb](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/notebooks/preprocess-clip/VinDr.ipynb)
+get [vindr_detection_v1_folds.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/vindr_detection_v1_folds.csv)
+. [VinDr.ipynb](https://github.com/batmanlabblob/main/src/codebase/notebooks/preprocess-clip/VinDr.ipynb)
 notebook requires vindr_detection_v1_folds.csv file as input and
-generate [clip_vindr_final.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/clip_vindr_final.csv)
+generate [clip_vindr_final.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/clip_vindr_final.csv)
 file.
 
 *
 
-*Both [clip_pretrain_100.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/clip_pretrain_100.csv)
-and [clip_vindr_final.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/clip_vindr_final.csv)
+*Both [clip_pretrain_100.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/clip_pretrain_100.csv)
+and [clip_vindr_final.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/clip_vindr_final.csv)
 files are used for pretraining the image-text and
 image-label variant of Mammo-CLIP.**
 
@@ -263,14 +263,14 @@ as:
 
 Use the following csv files as metadata for the downstream tasks (classification, detection, zero-shot):
 
-| Dataset | CSV                                                                                                                                  |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| VinDr   | [vindr_detection_v1_folds.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/vindr_detection_v1_folds.csv) |
-| RSNA    | [train_folds.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/train_folds.csv)                           |
+| Dataset | CSV                                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------ |
+| VinDr   | [vindr_detection_v1_folds.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/vindr_detection_v1_folds.csv) |
+| RSNA    | [train_folds.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/train_folds.csv)                           |
 
 For detection/localization tasks, we have included the coordinates of the resized bounding boxes of VinDr in the above
 csv file. Somebody interested in resizing the bounding boxes by themselves, run the following command
-with [finding_annotations.csv](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/data_csv/finding_annotations.csv)
+with [finding_annotations.csv](https://github.com/batmanlabblob/main/src/codebase/data_csv/finding_annotations.csv)
 file as input:
 
 ```bash
@@ -349,14 +349,14 @@ python ./src/preprocessing/preprocess_VinDr_detector.py
 
 Following are the pre-training checkpoints of Mammo-CLIP:
 
-| Model architecture | Checkpoints (Hugging Face)                                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Best performance   | [Efficient-Net B5](https://huggingface.co/shawn24/Mammo-CLIP/blob/main/Pre-trained-checkpoints/b5-model-best-epoch-7.tar)  |
-| Lightweight        | [Efficient-Net B2](https://huggingface.co/shawn24/Mammo-CLIP/blob/main/Pre-trained-checkpoints/b2-model-best-epoch-10.tar) |
+| Model architecture | Checkpoints (Hugging Face)                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Best performance   | [Efficient-Net B5](https://huggingface.co/shawn24blob/main/Pre-trained-checkpoints/b5-model-best-epoch-7.tar)  |
+| Lightweight        | [Efficient-Net B2](https://huggingface.co/shawn24blob/main/Pre-trained-checkpoints/b2-model-best-epoch-10.tar) |
 
 We have also uploaded the downstream checkpoints for classification and localization (both linear probe and finetuning)
 with the image encoder of Efficient-Net B5 Mammo-CLIP for fold
-0 [here](https://huggingface.co/shawn24/Mammo-CLIP/tree/main/Downstream-checkpoints).
+0 [here](https://huggingface.co/shawn24tree/main/Downstream-checkpoints).
 
 ## Pretraining Mammo-CLIP
 
@@ -373,27 +373,27 @@ torchrun --nproc_per_node=4 ./src/codebase/train.py --config-name pre_train_b5_c
 ```
 
 All the `yaml` files for the config are
-found [here](https://github.com/batmanlab/Mammo-CLIP/tree/main/src/codebase/configs).
+found [here](https://github.com/batmanlabtree/main/src/codebase/configs).
 
 * Use
-  [pre_train_b5_clip.yaml](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/configs/pre_train_b5_clip.yaml)
+  [pre_train_b5_clip.yaml](https://github.com/batmanlabblob/main/src/codebase/configs/pre_train_b5_clip.yaml)
   for pre-training image-text variant of Efficient-Net B5 Mammo-CLIP
 * Use
-  [pre_train_b2_clip.yaml](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/configs/pre_train_b2_clip.yaml)
+  [pre_train_b2_clip.yaml](https://github.com/batmanlabblob/main/src/codebase/configs/pre_train_b2_clip.yaml)
   for pre-training image-text variant of Efficient-Net B2 Mammo-CLIP
 * Use
-  [pre_train_b5_w_vindr_clip.yaml](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/configs/pre_train_b5_w_vindr_clip.yaml)
+  [pre_train_b5_w_vindr_clip.yaml](https://github.com/batmanlabblob/main/src/codebase/configs/pre_train_b5_w_vindr_clip.yaml)
   for pre-training image-text + image-label variant of Efficient-Net B5 Mammo-CLIP
 
 ## Creating classifiers and detectors for downstream evaluations
 
 * For creating classifiers for downstream evaluations using the image encoder of Mammo-CLIP, use the
   class `BreastClipClassifier`
-  in [breast-clip-classifier.py](https://github.com/batmanlab/Mammo-CLIP/blob/c9cc232368eaf0a6d55f1bea04490d9136362466/src/codebase/Classifiers/models/breast_clip_classifier.py#L6)
+  in [breast-clip-classifier.py](https://github.com/batmanlabblob/c9cc232368eaf0a6d55f1bea04490d9136362466/src/codebase/Classifiers/models/breast_clip_classifier.py#L6)
   file.
 * For creating detectors for downstream evaluations using the image encoder of Mammo-CLIP, use the
   function `RetinaNet_efficientnet`
-  in [detector_model.py](https://github.com/batmanlab/Mammo-CLIP/blob/c9cc232368eaf0a6d55f1bea04490d9136362466/src/codebase/Detectors/retinanet/detector_model.py#L357)
+  in [detector_model.py](https://github.com/batmanlabblob/c9cc232368eaf0a6d55f1bea04490d9136362466/src/codebase/Detectors/retinanet/detector_model.py#L357)
   file.
 
 ## Evaluation
@@ -403,7 +403,7 @@ found [here](https://github.com/batmanlab/Mammo-CLIP/tree/main/src/codebase/conf
 ```bash
 FOLD=0
 CKPT="b2-model-best-epoch-10.tar"
-DIR="./Mammo-CLIP/src/codebase/outputs/upmc_clip/b2_detector_period_n"
+DIR=".src/codebase/outputs/upmc_clip/b2_detector_period_n"
 FULL_CKPT="$DIR/checkpoints/fold_$FOLD/$CKPT"
 
 python ./src/codebase/eval_zero_shot_clip.py \
@@ -419,7 +419,7 @@ python ./src/codebase/train_classifier.py \
   --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --data_frac 1.0 \
   --dataset 'ViNDr' \
   --arch 'upmc_breast_clip_det_b5_period_n_lp' \
@@ -458,7 +458,7 @@ python ./src/codebase/train_classifier.py \
   --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --data_frac 1.0 \
   --dataset 'ViNDr' \
   --arch 'upmc_breast_clip_det_b5_period_n_ft' \
@@ -497,7 +497,7 @@ python ./src/codebase/train_detector.py \
   --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --dataset 'ViNDr' \
   --arch 'clip_b5_upmc' \
   --epochs 120 \
@@ -535,7 +535,7 @@ python ./src/codebase/train_detector.py \
   --data-dir '/RSNA_Breast_Imaging/Dataset' \
   --img-dir 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/images_png' \
   --csv-file 'External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0/vindr_detection_v1_folds.csv' \
-  --clip_chk_pt_path "/Mammo-CLIP/src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
+  --clip_chk_pt_path "src/codebase/outputs/upmc_clip/b5_detector_period_n/checkpoints/fold_0/b5-model-best-epoch-7.tar" \
   --dataset 'ViNDr' \
   --arch 'clip_b5_upmc' \
   --epochs 120 \
@@ -569,35 +569,35 @@ python ./src/codebase/train_detector.py \
 ## Tutorial Notebooks
 
 * For a quick look at setting up the downstream classifier, follow the
-  notebook: [Downstream_classifier_tutorial.ipynb](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/notebooks/Tutorial/Downstream_classifier_tutorial.ipynb)
+  notebook: [Downstream_classifier_tutorial.ipynb](https://github.com/batmanlabblob/main/src/codebase/notebooks/Tutorial/Downstream_classifier_tutorial.ipynb)
 * For a quick look at downloading the image embeddings from the vision encoder of Mammo-CLIP, follow the
-  notebook: [Get_Embedding_Vision_encoder_Mammo_CLIP_tutorial.ipynb](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/notebooks/Tutorial/Get_Embedding_Vision_encoder_Mammo_CLIP_tutorial.ipynb)
+  notebook: [Get_Embedding_Vision_encoder_Mammo_CLIP_tutorial.ipynb](https://github.com/batmanlabblob/main/src/codebase/notebooks/Tutorial/Get_Embedding_Vision_encoder_Mammo_CLIP_tutorial.ipynb)
 
 ## Additional scripts
 
 For all the training scripts, we add them in
-the [scripts](https://github.com/batmanlab/Mammo-CLIP/tree/main/src/scripts) directory:
+the [scripts](https://github.com/batmanlabtree/main/src/scripts) directory:
 
-| Scripts                                                                                                                              | Purpose                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| [pretrain_mammo_clip_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b5.sh)                 | Pretrain Mammo-CLIP b5 with image+text data                       |
-| [pretrain_mammo_clip_b5_ddp.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b5_ddp.sh)         | Pretrain Mammo-CLIP b5 with image+text data using multiple GPUs   |
-| [pretrain_mammo_clip_b2.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b2.sh)                 | Pretrain Mammo-CLIP b2 with image+text data                       |
-| [pretrain_mammo_clip_b2_ddp.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_b2_ddp.sh)         | Pretrain Mammo-CLIP b2 with image+text data using multiple GPUs   |
-| [pretrain_mammo_clip_w_vindr_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/pretrain_mammo_clip_w_vindr_b5.sh) | Pretrain Mammo-CLIP b5 with image+text data and image+label data  |
-| [classifier_fine_tune_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/classifier_fine_tune_b5.sh)               | Evaluate Mammo-CLIP b5 on fine tuning tasks for classification    |
-| [classifier_fine_tune_b2.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/classifier_fine_tune_b2.sh)               | Evaluate Mammo-CLIP b2 on fine tuning tasks for classification    |
-| [classifier_linear_probe_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/classifier_linear_probe_b5.sh)         | Evaluate Mammo-CLIP b5 on linear probing tasks for classification |
-| [classifier_linear_probe_b2.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/classifier_linear_probe_b2.sh)         | Evaluate Mammo-CLIP b2 on linear probing tasks for classification |
-| [detector_fine_tune_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/detector_fine_tune_b5.sh)                   | Evaluate Mammo-CLIP b5 on fine tuning tasks for detection         |
-| [detector_fine_tune_b2.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/detector_fine_tune_b2.sh)                   | Evaluate Mammo-CLIP b2 on fine tuning tasks for detection         |
-| [detector_linear_probe_b5.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/detector_linear_probe_b5.sh)             | Evaluate Mammo-CLIP b5 on linear probing tasks for detection      |
-| [detector_linear_probe_b2.sh](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/scripts/detector_linear_probe_b2.sh)             | Evaluate Mammo-CLIP b2 on linear probing tasks for detection      |
+| Scripts                                                                                                                  | Purpose                                                           |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| [pretrain_mammo_clip_b5.sh](https://github.com/batmanlabblob/main/src/scripts/pretrain_mammo_clip_b5.sh)                 | Pretrain Mammo-CLIP b5 with image+text data                       |
+| [pretrain_mammo_clip_b5_ddp.sh](https://github.com/batmanlabblob/main/src/scripts/pretrain_mammo_clip_b5_ddp.sh)         | Pretrain Mammo-CLIP b5 with image+text data using multiple GPUs   |
+| [pretrain_mammo_clip_b2.sh](https://github.com/batmanlabblob/main/src/scripts/pretrain_mammo_clip_b2.sh)                 | Pretrain Mammo-CLIP b2 with image+text data                       |
+| [pretrain_mammo_clip_b2_ddp.sh](https://github.com/batmanlabblob/main/src/scripts/pretrain_mammo_clip_b2_ddp.sh)         | Pretrain Mammo-CLIP b2 with image+text data using multiple GPUs   |
+| [pretrain_mammo_clip_w_vindr_b5.sh](https://github.com/batmanlabblob/main/src/scripts/pretrain_mammo_clip_w_vindr_b5.sh) | Pretrain Mammo-CLIP b5 with image+text data and image+label data  |
+| [classifier_fine_tune_b5.sh](https://github.com/batmanlabblob/main/src/scripts/classifier_fine_tune_b5.sh)               | Evaluate Mammo-CLIP b5 on fine tuning tasks for classification    |
+| [classifier_fine_tune_b2.sh](https://github.com/batmanlabblob/main/src/scripts/classifier_fine_tune_b2.sh)               | Evaluate Mammo-CLIP b2 on fine tuning tasks for classification    |
+| [classifier_linear_probe_b5.sh](https://github.com/batmanlabblob/main/src/scripts/classifier_linear_probe_b5.sh)         | Evaluate Mammo-CLIP b5 on linear probing tasks for classification |
+| [classifier_linear_probe_b2.sh](https://github.com/batmanlabblob/main/src/scripts/classifier_linear_probe_b2.sh)         | Evaluate Mammo-CLIP b2 on linear probing tasks for classification |
+| [detector_fine_tune_b5.sh](https://github.com/batmanlabblob/main/src/scripts/detector_fine_tune_b5.sh)                   | Evaluate Mammo-CLIP b5 on fine tuning tasks for detection         |
+| [detector_fine_tune_b2.sh](https://github.com/batmanlabblob/main/src/scripts/detector_fine_tune_b2.sh)                   | Evaluate Mammo-CLIP b2 on fine tuning tasks for detection         |
+| [detector_linear_probe_b5.sh](https://github.com/batmanlabblob/main/src/scripts/detector_linear_probe_b5.sh)             | Evaluate Mammo-CLIP b5 on linear probing tasks for detection      |
+| [detector_linear_probe_b2.sh](https://github.com/batmanlabblob/main/src/scripts/detector_linear_probe_b2.sh)             | Evaluate Mammo-CLIP b2 on linear probing tasks for detection      |
 
 ## Mammo-FActOR
 
 For training Mammo-FActOR, refer to the
-following [notebook](https://github.com/batmanlab/Mammo-CLIP/blob/main/src/codebase/notebooks/Mammo-Factor/Mammo-Factor.ipynb).
+following [notebook](https://github.com/batmanlabblob/main/src/codebase/notebooks/Mammo-Factor/Mammo-Factor.ipynb).
 
 ## Citation
 
@@ -652,4 +652,4 @@ for enabling multi-GPU support to Mammo-CLIP.
 ## Contributing
 
 Did you try Mammo-CLIP on other datasets containing 2D-Mammograms and want to report the results? Feel free to send
-a [pull request](https://github.com/batmanlab/Mammo-CLIP/pulls).
+a [pull request](https://github.com/batmanlabpulls).

@@ -35,4 +35,4 @@ base:
 
 hydra:
   run:
-    dir: /Mammo-CLIP/src/codebase/outputs/upmc_vindr_clip/b5_detector_prompts_all_period_${base.period}
+    dir: src/codebase/outputs/upmc_vindr_clip/b5_detector_prompts_all_period_${base.period}

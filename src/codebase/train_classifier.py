@@ -14,13 +14,13 @@ import pickle
 def config():
     parser = argparse.ArgumentParser()
     parser.add_argument('--tensorboard-path', metavar='DIR',
-                        default='/Mammo-CLIP/log',
+                        default='log',
                         help='path to tensorboard logs')
     parser.add_argument('--checkpoints', metavar='DIR',
-                        default='/Mammo-CLIP/checkpoints',
+                        default='checkpoints',
                         help='path to checkpoints')
     parser.add_argument('--output_path', metavar='DIR',
-                        default='/Mammo-CLIP/out',
+                        default='out',
                         help='path to output logs')
     parser.add_argument(
         "--data-dir",
@@ -138,6 +138,14 @@ def main(args):
             "fold1": 74.88425925925925,
             "fold2": 74.88425925925925,
             "fold3": 74.884259259259255,
+        }
+    # Copied from Ladder paper since this repo doesnt have the BCE weights for abnormality
+    elif args.weighted_BCE == "y" and args.dataset.lower() == "vindr" and args.label.lower() == "abnormal":
+        args.BCE_weights = {
+            "fold0": 12.756594724220623,
+            "fold1": 12.756594724220623,
+            "fold2": 12.756594724220623,
+            "fold3": 12.756594724220623
         }
 
     if args.balanced_dataloader == "y":

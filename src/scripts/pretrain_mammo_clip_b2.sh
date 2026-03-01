@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --output=/Mammo-CLIP/src/psc_logs/clip_train/b2_det_%j.out
+#SBATCH --output=src/psc_logs/clip_train/b2_det_%j.out
 
 pwd
 hostname
@@ -8,7 +8,7 @@ date
 CURRENT=$(date +"%Y-%m-%d_%T")
 echo $CURRENT
 
-slurm_output_train1=/Mammo-CLIP/src/psc_logs/clip_train/b2_det_$CURRENT.out
+slurm_output_train1=src/psc_logs/clip_train/b2_det_$CURRENT.out
 
 echo "Pretrain Mammo-clip b2"
 source /ocean/projects/asc170022p/shg121/anaconda3/etc/profile.d/conda.sh

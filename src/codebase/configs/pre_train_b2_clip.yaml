@@ -34,4 +34,4 @@ base:
 
 hydra:
   run:
-    dir: /Mammo-CLIP/src/codebase/outputs/upmc_clip/b2_detector_period_${base.period}
+    dir: src/codebase/outputs/upmc_clip/b2_detector_period_${base.period}

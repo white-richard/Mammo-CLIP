@@ -268,7 +268,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--dataset-path", type=str,
-                        default="/Mammo-CLIP/src/codebase/data_csv")
+                        default="src/codebase/data_csv")
     parser.add_argument("--csv-path", type=str,
                         default="upmc_dicom_consolidated_final_folds_BIRADS_num_1_report.csv")
     parser.add_argument("--dataset", type=str,
