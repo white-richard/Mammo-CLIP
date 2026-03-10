@@ -1,17 +1,19 @@
 """
-Extract vision features from MammoCLIP and save them for downstream use.
+Extract vision features from MammoCLIP or CXR Foundation and save them for
+downstream use.
 
 Features are saved as a .pt file containing:
     {
         "features":   Float tensor of shape (N, D),
         "labels":     Long tensor  of shape (N,),
         "img_paths":  list[str]    of length N,
+        "metadata":   pd.DataFrame of shape (N, C)  -- all CSV columns,
         "feature_dim": int,
         "dataset":    str,
         "arch":       str,
     }
 
-Usage
+Usage — MammoCLIP (default)
 -----
 python ./src/codebase/extract_features.py \
   --data-dir "$HOME/.code/datasets/vindr-mammo" \
@@ -25,9 +27,28 @@ python ./src/codebase/extract_features.py \
   --output-file "features/vindr_abnormal_features.pt" \
   --batch-size 16 \
   --num-workers 4
+
+Usage — CXR Foundation (Google ELIXR-C + ELIXR-B)
+-----
+python ./src/codebase/extract_features.py \
+  --model cxr-foundation \
+  --data-dir "$HOME/.code/datasets/vindr-mammo" \
+  --img-dir "images_png" \
+  --csv-file "vindr_detection_v1_folds_abnormal.csv" \
+  --cxr-foundation-dir "$HOME/.code/model_weights/cxr-foundation/hf" \
+  --dataset "ViNDr" \
+  --split "all" \
+  --label "abnormal" \
+  --output-file "features/vindr_abnormal_cxr_foundation_features.pt" \
+  --num-workers 4
+
+Requirements for CXR Foundation (install separately):
+    pip install tensorflow tensorflow-text huggingface_hub
 """
 
 import argparse
+import logging
+import os
 import sys
 from pathlib import Path
 
@@ -43,10 +64,84 @@ sys.path.insert(0, str(Path(__file__).parent))
 from Classifiers.models.breast_clip_classifier import BreastClipClassifier
 from utils import seed_all
 
+# ---------------------------------------------------------------------------
+# CXR Foundation helpers (TensorFlow-based; imported lazily)
+# ---------------------------------------------------------------------------
+
+
+def _import_tf():
+    try:
+        import tensorflow as tf
+
+        tf.get_logger().setLevel(logging.ERROR)
+
+        gpus = tf.config.list_physical_devices("GPU")
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+
+        return tf
+    except ImportError:
+        raise ImportError(
+            "TensorFlow is required for CXR Foundation but not installed.\n"
+            "Install it with:  pip install tensorflow tensorflow-text"
+        )
+
+
+def _import_tf_text():
+    try:
+        import tensorflow_text  # noqa: F401 — registers custom ops
+    except ImportError as e:
+        if "tensorflow_text" in str(e):
+            raise ImportError(
+                "tensorflow-text is required but not installed.\n"
+                "Install it with:  pip install tensorflow-text\n"
+                "It must match your TensorFlow version exactly."
+            ) from e
+        raise
+
+
+def _png_to_tfexample(image_array: np.ndarray):
+    """Convert a grayscale uint8 numpy array to a serialised tf.train.Example."""
+    tf = _import_tf()
+    image_uint8 = image_array.astype(np.uint8)
+    encoded = tf.image.encode_png(image_uint8[..., np.newaxis]).numpy()
+    feature = {
+        "image/encoded": tf.train.Feature(bytes_list=tf.train.BytesList(value=[encoded])),
+        "image/format": tf.train.Feature(bytes_list=tf.train.BytesList(value=[b"png"])),
+    }
+    return tf.train.Example(features=tf.train.Features(feature=feature))
+
+
+def _run_elixrc(image_array: np.ndarray, model_dir: str) -> np.ndarray:
+    """Run ELIXR-C to produce interim image embeddings."""
+    _import_tf_text()
+    tf = _import_tf()
+    serialized = _png_to_tfexample(image_array).SerializeToString()
+    model = tf.saved_model.load(os.path.join(model_dir, "elixr-c-v2-pooled"))
+    infer = model.signatures["serving_default"]
+    output = infer(input_example=tf.constant([serialized]))
+    return output["feature_maps_0"].numpy()
+
+
+def _run_elixrb(elixrc_embedding: np.ndarray, model_dir: str) -> np.ndarray:
+    """Run ELIXR-B QFormer to produce final contrastive image embeddings."""
+    tf = _import_tf()
+    model = tf.saved_model.load(os.path.join(model_dir, "pax-elixr-b-text"))
+    infer = model.signatures["serving_default"]
+    qformer_input = {
+        "image_feature": elixrc_embedding.tolist(),
+        "ids": np.zeros((1, 1, 128), dtype=np.int32).tolist(),
+        "paddings": np.zeros((1, 1, 128), dtype=np.float32).tolist(),
+    }
+    output = infer(**qformer_input)
+    # shape: (1, num_query_tokens, embed_dim) — flatten to (1, D) by mean-pooling
+    embeddings = output["all_contrastive_img_emb"].numpy()
+    return embeddings
+
 
 class MammoFeatureDataset(Dataset):
     """
-    Generic mammography dataset for feature extraction.
+    Generic mammography dataset for feature extraction (MammoCLIP models).
 
     Supports VinDr and RSNA conventions out of the box:
         VinDr: <data_dir>/<img_dir>/<patient_id>/<image_id>          (no extension added)
@@ -150,18 +245,27 @@ class MammoFeatureDataset(Dataset):
         label_val = row.get(self.label, -1)
         label = torch.tensor(int(label_val), dtype=torch.long)
 
+        # Pass all CSV columns through as a plain dict of Python scalars/strings
+        row_meta = {col: row[col] for col in self.df.columns}
+
         return {
             "image": img,
             "label": label,
             "img_path": str(img_path),
+            "meta": row_meta,
         }
 
 
 def collate_fn(batch):
+    # Collate metadata: list of per-column lists
+    meta_keys = batch[0]["meta"].keys()
+    meta = {k: [b["meta"][k] for b in batch] for k in meta_keys}
+
     return {
         "image": torch.stack([b["image"] for b in batch]),
         "label": torch.stack([b["label"] for b in batch]),
         "img_path": [b["img_path"] for b in batch],
+        "meta": meta,
     }
 
 
@@ -190,6 +294,7 @@ def load_dataframe(data_dir: Path, csv_file: str, dataset: str, split: str) -> p
         if split_col in df.columns:
             df = df[df[split_col] == wanted].reset_index(drop=True)
         else:
+            raise ValueError(f"Expected column '{split_col}' not found in VinDr CSV.")
             print(f"[warning] no '{split_col}' column found; returning all rows.")
 
     elif dataset_lower == "rsna":
@@ -201,6 +306,7 @@ def load_dataframe(data_dir: Path, csv_file: str, dataset: str, split: str) -> p
             elif split == "test":
                 df = df[df[fold_col] == 0].reset_index(drop=True)
         else:
+            raise ValueError(f"Expected column '{fold_col}' not found in RSNA CSV.")
             print(f"[warning] no '{fold_col}' column found; returning all rows.")
 
     else:
@@ -220,7 +326,95 @@ def load_dataframe(data_dir: Path, csv_file: str, dataset: str, split: str) -> p
     return df
 
 
+class CxrFoundationDataset(Dataset):
+    """
+    Mammography dataset for CXR Foundation feature extraction.
+
+    Images are loaded as grayscale uint8 numpy arrays and kept on the CPU;
+    the TF SavedModel handles all preprocessing internally.  The path-building
+    logic mirrors ``MammoFeatureDataset``.
+    """
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        data_dir: Path,
+        img_dir: str,
+        dataset: str,
+        label: str,
+    ):
+        self.df = df.reset_index(drop=True)
+        self.dir_path = data_dir / img_dir
+        self.dataset = dataset.lower()
+        self.label = label
+
+    def __len__(self):
+        return len(self.df)
+
+    def _build_path(self, row) -> Path:
+        patient_id = str(row["patient_id"])
+        image_id = str(row["image_id"])
+        if self.dataset in ("vindr", "rsna"):
+            if not image_id.endswith(".png"):
+                image_id = image_id + ".png"
+            return self.dir_path / patient_id / image_id
+        p = self.dir_path / patient_id / image_id
+        if p.exists():
+            return p
+        return Path(str(p) + ".png")
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        img_path = self._build_path(row)
+
+        try:
+            img_array = np.array(Image.open(img_path).convert("L"), dtype=np.uint8)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load image at {img_path}: {e}") from e
+
+        label_val = row.get(self.label, -1)
+        label = torch.tensor(int(label_val), dtype=torch.long)
+        row_meta = {col: row[col] for col in self.df.columns}
+
+        return {
+            "image_array": img_array,  # numpy uint8, kept as-is for TF model
+            "label": label,
+            "img_path": str(img_path),
+            "meta": row_meta,
+        }
+
+
+def collate_fn_cxr(batch):
+    """Collate for CXR Foundation: images stay as a list of numpy arrays."""
+    meta_keys = batch[0]["meta"].keys()
+    meta = {k: [b["meta"][k] for b in batch] for k in meta_keys}
+    return {
+        "image_arrays": [b["image_array"] for b in batch],
+        "label": torch.stack([b["label"] for b in batch]),
+        "img_path": [b["img_path"] for b in batch],
+        "meta": meta,
+    }
+
+
 def build_dataloader(df: pd.DataFrame, args) -> DataLoader:
+    if args.model == "cxr-foundation":
+        dataset = CxrFoundationDataset(
+            df=df,
+            data_dir=Path(args.data_dir),
+            img_dir=args.img_dir,
+            dataset=args.dataset,
+            label=args.label,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            pin_memory=False,  # numpy arrays, not tensors
+            drop_last=False,
+            collate_fn=collate_fn_cxr,
+        )
+
     dataset = MammoFeatureDataset(
         df=df,
         data_dir=Path(args.data_dir),
@@ -270,8 +464,30 @@ def load_model(clip_chk_pt_path: str, arch: str, device: torch.device) -> Breast
     return model
 
 
+def load_cxr_foundation_models(model_dir: str):
+    """
+    Load both ELIXR-C and ELIXR-B TF SavedModels and return a tuple of their
+    ``serving_default`` inference callables.
+
+    Returns
+    -------
+    (elixrc_infer, elixrb_infer, tf_module)
+        tf_module is returned so the caller can construct TF tensors.
+    """
+    _import_tf_text()
+    tf = _import_tf()
+
+    print(f"Loading CXR Foundation models from: {model_dir}")
+    elixrc_model = tf.saved_model.load(os.path.join(model_dir, "elixr-c-v2-pooled"))
+    elixrb_model = tf.saved_model.load(os.path.join(model_dir, "pax-elixr-b-text"))
+    elixrc_infer = elixrc_model.signatures["serving_default"]
+    elixrb_infer = elixrb_model.signatures["serving_default"]
+    print("CXR Foundation models loaded.")
+    return elixrc_infer, elixrb_infer, tf
+
+
 # ---------------------------------------------------------------------------
-# Extraction loop
+# Extraction loops
 # ---------------------------------------------------------------------------
 
 
@@ -280,11 +496,13 @@ def extract_features(model: BreastClipClassifier, loader: DataLoader, device: to
     all_features = []
     all_labels = []
     all_paths = []
+    all_meta: dict[str, list] = {}
 
     for batch in tqdm(loader, desc="Extracting features", unit="batch"):
         images = batch["image"].to(device)
         labels = batch["label"]
         paths = batch["img_path"]
+        meta = batch["meta"]
 
         # Handle swin encoder: needs (B, H, W, C)
         if model.get_image_encoder_type().lower() == "swin":
@@ -297,7 +515,62 @@ def extract_features(model: BreastClipClassifier, loader: DataLoader, device: to
         all_labels.append(labels)
         all_paths.extend(paths)
 
-    return torch.cat(all_features, dim=0), torch.cat(all_labels, dim=0), all_paths
+        # Accumulate metadata columns
+        for k, v in meta.items():
+            all_meta.setdefault(k, []).extend(v)
+
+    metadata_df = pd.DataFrame(all_meta)
+    return torch.cat(all_features, dim=0), torch.cat(all_labels, dim=0), all_paths, metadata_df
+
+
+def extract_features_cxr_foundation(elixrc_infer, elixrb_infer, tf, loader: DataLoader):
+    """
+    Extract features using the CXR Foundation (ELIXR-C → ELIXR-B) pipeline.
+
+    ELIXR-C is called once per batch with all serialised examples stacked
+    together.  ELIXR-B still runs per-image because its QFormer input shape
+    is fixed to batch-size 1 in the SavedModel signature.  The ELIXR-B output
+    has shape ``(1, num_query_tokens, embed_dim)``; we mean-pool over the
+    token dimension to get a single vector per image.
+    """
+    all_features = []
+    all_labels = []
+    all_paths = []
+    all_meta: dict[str, list] = {}
+
+    for batch in tqdm(loader, desc="Extracting CXR Foundation features", unit="batch"):
+        image_arrays = batch["image_arrays"]  # list of numpy uint8 arrays
+        labels = batch["label"]
+        paths = batch["img_path"]
+        meta = batch["meta"]
+
+        # --- ELIXR-C + ELIXR-B: one call per image ---
+        batch_features = []
+        for img_array in image_arrays:
+            serialized = _png_to_tfexample(img_array).SerializeToString()
+            elixrc_out = elixrc_infer(input_example=tf.constant([serialized]))
+            elixrc_emb = elixrc_out["feature_maps_0"]  # (1, H', W', C') — keep as tf.Tensor
+            elixrb_out = elixrb_infer(
+                image_feature=elixrc_emb,
+                ids=tf.zeros((1, 1, 128), dtype=tf.int32),
+                paddings=tf.zeros((1, 1, 128), dtype=tf.float32),
+            )
+            # (1, num_query_tokens, embed_dim) → mean-pool → (embed_dim,)
+            emb = elixrb_out["all_contrastive_img_emb"].numpy()  # (1, T, D)
+            emb = emb.mean(axis=1).squeeze(0)  # (D,)
+            batch_features.append(emb)
+
+        features = torch.tensor(np.stack(batch_features), dtype=torch.float32)  # (B, D)
+
+        all_features.append(features)
+        all_labels.append(labels)
+        all_paths.extend(paths)
+
+        for k, v in meta.items():
+            all_meta.setdefault(k, []).extend(v)
+
+    metadata_df = pd.DataFrame(all_meta)
+    return torch.cat(all_features, dim=0), torch.cat(all_labels, dim=0), all_paths, metadata_df
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +580,13 @@ def extract_features(model: BreastClipClassifier, loader: DataLoader, device: to
 
 def config():
     parser = argparse.ArgumentParser(
-        description="Extract MammoCLIP vision features and save them to disk."
+        description="Extract vision features (MammoCLIP or CXR Foundation) and save them to disk."
+    )
+    parser.add_argument(
+        "--model",
+        default="mammoclip",
+        choices=["mammoclip", "cxr-foundation"],
+        help="Which model to use for feature extraction (default: mammoclip)",
     )
     parser.add_argument("--data-dir", required=True, type=str, help="Root directory of the dataset")
     parser.add_argument(
@@ -323,7 +602,20 @@ def config():
         help="CSV file with patient_id, image_id, labels, split columns",
     )
     parser.add_argument(
-        "--clip_chk_pt_path", required=True, type=str, help="Path to MammoCLIP checkpoint (.tar)"
+        "--clip_chk_pt_path",
+        default=None,
+        type=str,
+        help="Path to MammoCLIP checkpoint (.tar) — required when --model mammoclip",
+    )
+    parser.add_argument(
+        "--cxr-foundation-dir",
+        default="./hf",
+        type=str,
+        help=(
+            "Directory containing downloaded CXR Foundation SavedModels "
+            "(elixr-c-v2-pooled/ and pax-elixr-b-text/ subdirs). "
+            "Only used when --model cxr-foundation."
+        ),
     )
     parser.add_argument(
         "--dataset", default="ViNDr", type=str, help="Dataset name: ViNDr | RSNA | <custom>"
@@ -356,18 +648,18 @@ def config():
         "--std", default=0.25053555408335154, type=float, help="Per-image normalisation std"
     )
     parser.add_argument("--seed", default=42, type=int)
-    parser.add_argument("--device", default="cuda", type=str, help="Compute device: cuda | cpu")
+    parser.add_argument(
+        "--device",
+        default="cuda",
+        type=str,
+        help="Compute device for MammoCLIP: cuda | cpu (CXR Foundation runs on TF/GPU automatically)",
+    )
     return parser.parse_args()
 
 
 def main():
     args = config()
     seed_all(args.seed)
-
-    device = torch.device(
-        args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu"
-    )
-    print(f"Using device: {device}")
 
     # ---- Load & filter dataframe ----------------------------------------
     df = load_dataframe(
@@ -382,16 +674,29 @@ def main():
     print(f"Number of samples : {len(loader.dataset)}")
     print(f"Number of batches : {len(loader)}")
 
-    # ---- Load model -------------------------------------------------------
-    model = load_model(args.clip_chk_pt_path, args.arch, device)
-
-    # ---- Extract ----------------------------------------------------------
-    features, labels, img_paths = extract_features(model, loader, device)
+    # ---- Load model & extract --------------------------------------------
+    if args.model == "cxr-foundation":
+        elixrc_infer, elixrb_infer, tf = load_cxr_foundation_models(args.cxr_foundation_dir)
+        features, labels, img_paths, metadata_df = extract_features_cxr_foundation(
+            elixrc_infer, elixrb_infer, tf, loader
+        )
+        arch_tag = "cxr-foundation"
+    else:
+        if not args.clip_chk_pt_path:
+            raise ValueError("--clip_chk_pt_path is required when --model mammoclip")
+        device = torch.device(
+            args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu"
+        )
+        print(f"Using device: {device}")
+        model = load_model(args.clip_chk_pt_path, args.arch, device)
+        features, labels, img_paths, metadata_df = extract_features(model, loader, device)
+        arch_tag = args.arch
 
     print("\nExtraction complete.")
-    print(f"  features shape : {features.shape}")
-    print(f"  labels shape   : {labels.shape}")
-    print(f"  unique labels  : {labels.unique().tolist()}")
+    print(f"  features shape  : {features.shape}")
+    print(f"  labels shape    : {labels.shape}")
+    print(f"  unique labels   : {labels.unique().tolist()}")
+    print(f"  metadata columns: {list(metadata_df.columns)}")
 
     # ---- Save -------------------------------------------------------------
     output_path = Path(args.output_file)
@@ -401,9 +706,10 @@ def main():
         "features": features,  # (N, D)  float32
         "labels": labels,  # (N,)    int64
         "img_paths": img_paths,  # list[str]
+        "metadata": metadata_df,  # pd.DataFrame, all CSV columns, length N
         "feature_dim": features.shape[1],
         "dataset": args.dataset,
-        "arch": args.arch,
+        "arch": arch_tag,
         "split": args.split,
         "label_col": args.label,
     }

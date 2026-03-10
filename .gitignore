@@ -3,6 +3,7 @@ out/
 log/
 checkpoints/
 .idea
+hf/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
