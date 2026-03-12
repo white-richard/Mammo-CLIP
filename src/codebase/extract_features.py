@@ -1,5 +1,5 @@
 """
-Extract vision features from MammoCLIP and save them for
+Extract vision features from MammoCLIP or CXR-Foundation and save them for
 downstream use.
 
 Features are saved as a .pt file containing:
@@ -19,17 +19,36 @@ Labels can be recovered via: metadata[label_col].values
 Usage — MammoCLIP (default)
 -----
 python ./src/codebase/extract_features.py \
+  --model mammoclip \
   --data-dir "$HOME/.code/datasets/vindr-mammo" \
   --img-dir "images_png" \
-  --csv-file "vindr_detection_v1_folds_abnormal.csv" \
+  --csv-file "vindr_detection_v1_folds.csv" \
   --clip_chk_pt_path "$HOME/.code/model_weights/mammoclip/mammoclip-b5-model-best-epoch-7.tar" \
   --dataset "ViNDr" \
   --split "all" \
-  --label "abnormal" \
   --arch "upmc_breast_clip_det_b5_period_n_lp" \
   --output-file "features/vindr_abnormal_features.pt" \
   --batch-size 16 \
   --num-workers 4
+
+Usage — CXR-Foundation
+-----
+python ./src/codebase/extract_features.py \
+  --model cxr-foundation \
+  --data-dir "$HOME/.code/datasets/vindr-mammo" \
+  --img-dir "images_png" \
+  --csv-file "vindr_detection_v1_folds.csv" \
+  --dataset "ViNDr" \
+  --split "all" \
+  --output-file "features/cxr_elixr_features.pt" \
+  --batch-size 16 \
+  --num-workers 4
+
+Notes:
+- The CXR-Foundation backend uses TensorFlow saved_model artifacts which are loaded
+  at runtime. The wrapper converts images to TF Examples, runs the TF models,
+  converts outputs to NumPy and then to PyTorch tensors so the rest of the
+  extraction pipeline (dataloader, saving .pt payload) remains unchanged.
 
 """
 
@@ -39,11 +58,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import tensorflow_text as text
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+text = None
 # torch.multiprocessing.set_sharing_strategy('file_system')
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -262,6 +283,145 @@ def build_dataloader(df: pd.DataFrame, args) -> DataLoader:
 # ---------------------------------------------------------------------------
 
 
+def _png_to_tfexample(image_array: np.ndarray):
+    """
+    Helper: create a tf.train.Example from a NumPy grayscale image.
+    Implemented as a local helper to avoid importing TF globally at module import time.
+    """
+    import io as _io
+
+    try:
+        import png as _png
+    except Exception as e:
+        raise ImportError(
+            "The 'pypng' package is required for CXR-Foundation preprocessing."
+        ) from e
+
+    import numpy as _np
+    import tensorflow as _tf
+
+    image = image_array.astype(_np.float32)
+    image -= image.min()
+
+    if image_array.dtype == _np.uint8:
+        pixel_array = image.astype(_np.uint8)
+        bitdepth = 8
+    else:
+        max_val = image.max()
+        if max_val > 0:
+            image *= 65535 / max_val
+        pixel_array = image.astype(_np.uint16)
+        bitdepth = 16
+
+    if pixel_array.ndim != 2:
+        raise ValueError(f"Array must be 2-D. Actual dimensions: {pixel_array.ndim}")
+
+    output = _io.BytesIO()
+    _png.Writer(
+        width=pixel_array.shape[1], height=pixel_array.shape[0], greyscale=True, bitdepth=bitdepth
+    ).write(output, pixel_array.tolist())
+    png_bytes = output.getvalue()
+
+    example = _tf.train.Example()
+    features = example.features.feature
+    features["image/encoded"].bytes_list.value.append(png_bytes)
+    features["image/format"].bytes_list.value.append(b"png")
+    return example
+
+
+class CXRFoundationWrapper:
+    """
+    Minimal wrapper around the CXR-Foundation TensorFlow saved_models.
+
+    Responsibilities:
+    - Load TF saved_model artifacts from a local directory.
+    - Provide a method `encode_from_paths(paths)` that accepts a list of image
+      file paths, runs the TF models, and returns a torch.Tensor of shape (B, D).
+    """
+
+    def __init__(self, local_dir: str):
+        # Local imports so the module can be used even if TF isn't installed
+        import os as _os
+
+        try:
+            import tensorflow as _tf
+        except Exception as e:
+            raise ImportError("TensorFlow is required for the 'cxr-foundation' backend.") from e
+        import numpy as _np
+
+        self._tf = _tf
+        self._np = _np
+        self._local_dir = local_dir
+
+        # Load saved models (paths expected within local_dir)
+        elixr_path = _os.path.join(local_dir, "elixr-c-v2-pooled")
+        qformer_path = _os.path.join(local_dir, "pax-elixr-b-text")
+        print(f"Loading CXR-Foundation ELIXR model from: {elixr_path}")
+        self._elixrc_model = _tf.saved_model.load(elixr_path)
+        self._elixrc_infer = self._elixrc_model.signatures["serving_default"]
+        print(f"Loading CXR-Foundation Q-Former model from: {qformer_path}")
+        self._qformer_model = _tf.saved_model.load(qformer_path)
+        self._qformer_infer = self._qformer_model.signatures["serving_default"]
+
+    def encode_from_paths(
+        self, paths: list[str], device: torch.device = torch.device("cpu")
+    ) -> torch.Tensor:
+        """
+        Given a list of image file paths, run the TF models in a batch
+        and return a torch Tensor of shape (B, D).
+        """
+        from PIL import Image as _Image
+        # Assuming torch is imported at the top of your file
+
+        tf = self._tf
+        np = self._np
+
+        if not paths:
+            return torch.empty((0, 0), dtype=torch.float32)
+
+        batch_size = len(paths)
+        serialized_examples = []
+
+        # 1. Prepare the batch of serialized TF Examples
+        for p in paths:
+            with _Image.open(p) as img:
+                img_gray = img.convert("L")
+                arr = np.array(img_gray)
+            # Assuming _png_to_tfexample is defined elsewhere in your file
+            ex = _png_to_tfexample(arr)
+            serialized_examples.append(ex.SerializeToString())
+
+        # Create a single TF tensor containing the whole batch of strings
+        # Shape will be (B,)
+        serialized_tf = tf.constant(serialized_examples)
+
+        # 2. Batched ELIXR-C inference
+        elixr_output = self._elixrc_infer(input_example=serialized_tf)
+        elixr_embedding = elixr_output["feature_maps_0"]
+
+        # 3. Batched Q-Former inference
+        # Adjust dummy inputs to match the actual batch size instead of hardcoding '1'
+        ids = tf.constant(np.zeros((batch_size, 1, 128), dtype=np.int32))
+        paddings = tf.constant(np.zeros((batch_size, 1, 128), dtype=np.float32))
+
+        qformer_output = self._qformer_infer(
+            image_feature=elixr_embedding, ids=ids, paddings=paddings
+        )
+
+        # 4. Process the output batch
+        emb_np = qformer_output["all_contrastive_img_emb"].numpy()
+        emb_np = np.asarray(emb_np, dtype=np.float32)
+
+        # Handle possible shapes like (B, 1, D) or (B, D)
+        if emb_np.ndim == 3:
+            emb_np = emb_np.reshape(batch_size, -1)
+
+        # Convert the whole batch to a PyTorch tensor at once
+        emb_pt = torch.from_numpy(emb_np)
+
+        return emb_pt
+
+
 def load_model(clip_chk_pt_path: str, arch: str, device: torch.device) -> BreastClipClassifier:
     """
     Load the MammoCLIP image encoder via BreastClipClassifier.
@@ -299,16 +459,26 @@ def extract_features(
     all_meta: dict[str, list] = {}
 
     for i, batch in enumerate(tqdm(loader, desc="Extracting features", unit="batch")):
-        images = batch["image"].to(device)
         paths = batch["img_path"]
         meta = batch["meta"]
 
-        # Handle swin encoder: needs (B, H, W, C)
-        if model.get_image_encoder_type().lower() == "swin":
-            images = images.squeeze(1).permute(0, 3, 1, 2)
+        # If the model provides a TF-backed encoding entrypoint, use it.
+        # CXRFoundation wrapper implements `encode_from_paths`.
+        if hasattr(model, "encode_from_paths"):
+            # encode_from_paths returns a torch.Tensor on CPU
+            features = model.encode_from_paths(paths, device=device)
+        else:
+            images = batch["image"].to(device)
+            # Handle swin encoder: needs (B, H, W, C)
+            if model.get_image_encoder_type().lower() == "swin":
+                images = images.squeeze(1).permute(0, 3, 1, 2)
+            features = model.encode_image(images)  # (B, D)
+            # Move to CPU for consistent saving
+            features = features.cpu()
 
-        features = model.encode_image(images)  # (B, D)
-        features = features.cpu()
+        # Ensure features are on CPU for concatenation / saving
+        if features.device != torch.device("cpu"):
+            features = features.cpu()
 
         all_features.append(features)
         all_paths.extend(paths)
@@ -337,7 +507,7 @@ def config():
     parser.add_argument(
         "--model",
         default="mammoclip",
-        choices=["mammoclip"],
+        choices=["mammoclip", "cxr-foundation"],
         help="Which model to use for feature extraction (default: mammoclip)",
     )
     parser.add_argument("--data-dir", required=True, type=str, help="Root directory of the dataset")
@@ -358,6 +528,12 @@ def config():
         default=None,
         type=str,
         help="Path to MammoCLIP checkpoint (.tar) — required when --model mammoclip",
+    )
+    parser.add_argument(
+        "--cxr_dir",
+        default="./cxr-foundation",
+        type=str,
+        help="Local directory containing CXR-Foundation saved_model artifacts (required when --model cxr-foundation)",
     )
 
     parser.add_argument(
@@ -435,6 +611,20 @@ def main():
             model, loader, device, debug_mode=args.debug_mode
         )
         arch_tag = args.arch
+
+    elif args.model == "cxr-foundation":
+        # CXR-Foundation is TF-based. We use a wrapper that executes TF saved_models,
+        # converts outputs to NumPy and then to PyTorch tensors so the downstream code
+        # (saving to .pt) remains identical.
+        cxr_dir = args.cxr_dir
+        print(f"Using CXR-Foundation saved_models at: {cxr_dir}")
+        # For TF-backed model we run TF; Torch device here is unused since TF runs independently.
+        device = torch.device("cpu")
+        model = CXRFoundationWrapper(cxr_dir)
+        features, img_paths, metadata_df = extract_features(
+            model, loader, device, debug_mode=args.debug_mode
+        )
+        arch_tag = "cxr-foundation"
 
     print("\nExtraction complete.")
     print(f"  features shape  : {features.shape}")
