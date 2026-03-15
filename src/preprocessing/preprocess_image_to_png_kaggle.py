@@ -158,8 +158,19 @@ def np_ExtractBreast(img):
     return img_copy[row_ind][:, col_ind]
 
 
+def apply_zoom_crop(img, zoom):
+    if zoom == 1:
+        return img
+    H, W = img.shape[:2]
+    crop_h = H // zoom
+    crop_w = W // zoom
+    y0 = (H - crop_h) // 2
+    x0 = (W - crop_w) // 2
+    return img[y0:y0 + crop_h, x0:x0 + crop_w]
+
+
 # https://www.kaggle.com/code/raddar/convert-dicom-to-np-array-the-correct-way/notebook
-def save_array(IMG_PATH, SIZE, SAVE_FOLDER, patient_id, img_id, voi_lut=False, fix_monochrome=True):
+def save_array(IMG_PATH, SIZE, SAVE_FOLDER, patient_id, img_id, zoom=1, voi_lut=False, fix_monochrome=True):
     path = IMG_PATH + f"{patient_id}/{img_id}.dcm"
 
     dicom = pydicom.dcmread(path)
@@ -176,6 +187,7 @@ def save_array(IMG_PATH, SIZE, SAVE_FOLDER, patient_id, img_id, voi_lut=False, f
     data = (data * 255).astype(np.uint8)
 
     data = np_ExtractBreast(data)
+    data = apply_zoom_crop(data, zoom)
     data = cv2.resize(data, SIZE, interpolation=cv2.INTER_AREA)
     cv2.imwrite(SAVE_FOLDER + f"{patient_id}/{img_id}.png", data)
 
@@ -232,7 +244,7 @@ def torch_ExtractBreast(img_ori):
     return img_ori[row_ind][:, col_ind]
 
 
-def convert_dicom_to_png(SIZE, IMG_PATH, SAVE_FOLDER, J2K_FOLDER, df):
+def convert_dicom_to_png(SIZE, IMG_PATH, SAVE_FOLDER, J2K_FOLDER, df, zoom=1):
     print("Number of images :", len(df))
 
     os.makedirs(SAVE_FOLDER, exist_ok=True)
@@ -292,6 +304,7 @@ def convert_dicom_to_png(SIZE, IMG_PATH, SAVE_FOLDER, J2K_FOLDER, df):
 
                 # Back to CPU + SAVE
                 img = img.cpu().numpy().astype(np.uint8)
+                img = apply_zoom_crop(img, zoom)
                 img = cv2.resize(img, SIZE, interpolation=cv2.INTER_AREA)
 
                 #             fig, axes = plt.subplots(figsize=(5, 5), ncols=1, nrows=1)
@@ -304,7 +317,7 @@ def convert_dicom_to_png(SIZE, IMG_PATH, SAVE_FOLDER, J2K_FOLDER, df):
 
         #     process remaining on cpu
         results = Parallel(n_jobs=2)(
-            delayed(save_array)(IMG_PATH, SIZE, SAVE_FOLDER, patient_id, img_id)
+            delayed(save_array)(IMG_PATH, SIZE, SAVE_FOLDER, patient_id, img_id, zoom=zoom)
             for patient_id, img_id in tqdm(zip(df['patient_id'].values, df['image_id'].values), total=len(df))
         )
 
@@ -314,13 +327,23 @@ def main():
     parser.add_argument('--phase', type=str, default='train', help='Phase of processing, e.g., "test"')
     parser.add_argument('--width', type=int, default=912, help='The width of the image')
     parser.add_argument('--height', type=int, default=1520, help='The height of the image')
+    parser.add_argument('--zoom', type=int, default=1,
+                        help='Zoom factor: center-crops 1/zoom of extracted breast before resize. '
+                             'Output size is always --width x --height.')
+    parser.add_argument('--num-images', type=int, default=None,
+                        help='Limit processing to the first N images (for quick testing).')
     parser.add_argument('--base_folder', type=str,
-                        default='/RSNA_Breast_Imaging/Dataset/RSNA_Cancer_Detection',
+        required=True,
                         help='Base folder for dataset and outputs')
 
     args = parser.parse_args()
+    if args.zoom < 1:
+        parser.error("--zoom must be a positive integer (minimum 1)")
 
-    save_folder = os.path.join(args.base_folder, f"mammo_clip/{args.phase}_images_png/")
+    if args.zoom == 1:
+        save_folder = os.path.join(args.base_folder, f"mammo_clip/{args.phase}_images_png/")
+    else:
+        save_folder = os.path.join(args.base_folder, f"{args.zoom}x_mammo_clip/{args.phase}_images_png/")
     img_path = os.path.join(args.base_folder, f"{args.phase}_images/")
     j2k_folder = os.path.join(args.base_folder, "tmp/j2k/")
     df = pd.read_csv(os.path.join(args.base_folder, f"{args.phase}.csv"))
@@ -331,12 +354,15 @@ def main():
     else:
         df = df
 
+    if args.num_images is not None:
+        df = df.iloc[:args.num_images].reset_index(drop=True)
+
     print('torch version:', torch.__version__)
     print('timm version:', timm.__version__)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('device:', device)
 
-    convert_dicom_to_png(SIZE, img_path, save_folder, j2k_folder, df)
+    convert_dicom_to_png(SIZE, img_path, save_folder, j2k_folder, df, zoom=args.zoom)
 
 
 if __name__ == "__main__":

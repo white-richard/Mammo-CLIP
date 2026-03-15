@@ -76,7 +76,18 @@ def ExtractBreast(img):
     return img_copy[row_ind][:, col_ind]
 
 
-def save_imgs(in_path, out_path, SIZE=(912, 1520)):
+def apply_zoom_crop(img, zoom):
+    if zoom == 1:
+        return img
+    H, W = img.shape[:2]
+    crop_h = H // zoom
+    crop_w = W // zoom
+    y0 = (H - crop_h) // 2
+    x0 = (W - crop_w) // 2
+    return img[y0:y0 + crop_h, x0:x0 + crop_w]
+
+
+def save_imgs(in_path, out_path, SIZE=(912, 1520), zoom=1):
     dicom = dicomsdl.open(in_path)
     data = dicom.pixelData()
     data = data[5:-5, 5:-5]
@@ -88,6 +99,7 @@ def save_imgs(in_path, out_path, SIZE=(912, 1520)):
     data = (data * 255).astype(np.uint8)
 
     img = ExtractBreast(data)
+    img = apply_zoom_crop(img, zoom)
     img = cv2.resize(img, SIZE, interpolation=cv2.INTER_AREA)
     cv2.imwrite(out_path, img)
 
@@ -99,11 +111,18 @@ def main():
     parser.add_argument('--phase', type=str, default='train', help='Phase of processing, e.g., "test"')
     parser.add_argument('--width', type=int, default=912, help='The width of the image')
     parser.add_argument('--height', type=int, default=1520, help='The height of the image')
+    parser.add_argument('--zoom', type=int, default=1,
+                        help='Zoom factor: center-crops 1/zoom of extracted breast before resize. '
+                             'Output size is always --width x --height.')
+    parser.add_argument('--num-images', type=int, default=None,
+                        help='Limit processing to the first N images (for quick testing).')
     parser.add_argument('--base_folder', type=str,
-                        default='/RSNA_Breast_Imaging/Dataset/External/Vindr/vindr-mammo-a-large-scale-benchmark-dataset-for-computer-aided-detection-and-diagnosis-in-full-field-digital-mammography-1.0.0',
+                        required=True,
                         help='Base folder for dataset and outputs')
 
     args = parser.parse_args()
+    if args.zoom < 1:
+        parser.error("--zoom must be a positive integer (minimum 1)")
     save_folder = os.path.join(args.base_folder, f"mammo_clip/images_png/")
     img_path = os.path.join(args.base_folder, f"images")
     j2k_folder = os.path.join(args.base_folder, "tmp/j2k/")
@@ -114,6 +133,9 @@ def main():
         df = df.reset_index(drop=True)
     else:
         df = df
+
+    if args.num_images is not None:
+        df = df.iloc[:args.num_images].reset_index(drop=True)
 
     print('df:', df.shape)
     print('torch version:', torch.__version__)
@@ -140,7 +162,7 @@ def main():
             _out_path = os.path.join(save_folder, patient_id, f"{img_id}.png")
 
             print(_in_path, _out_path)
-            save_imgs(in_path=_in_path, out_path=_out_path, SIZE=SIZE)
+            save_imgs(in_path=_in_path, out_path=_out_path, SIZE=SIZE, zoom=args.zoom)
 
 
 if __name__ == "__main__":
