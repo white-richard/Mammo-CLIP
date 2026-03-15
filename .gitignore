@@ -5,6 +5,11 @@ log/
 checkpoints/
 .idea
 hf/
+cxr-foundation/
+features/
+*.pt
+*.pth
+CLAUDE.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

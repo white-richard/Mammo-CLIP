@@ -16,7 +16,7 @@ Features are saved as a .pt file containing:
 
 Labels can be recovered via: metadata[label_col].values
 
-Usage — MammoCLIP (default)
+Usage — MammoCLIP - Vindr
 -----
 python ./src/codebase/extract_features.py \
   --model mammoclip \
@@ -27,22 +27,50 @@ python ./src/codebase/extract_features.py \
   --dataset "ViNDr" \
   --split "all" \
   --arch "upmc_breast_clip_det_b5_period_n_lp" \
-  --output-file "features/vindr_abnormal_features.pt" \
+  --output-file "features/mammoclip_vindr_abnormal_features.pt" \
   --batch-size 16 \
   --num-workers 4
 
-Usage — CXR-Foundation
+Usage — MammoCLIP - RSNA
 -----
 python ./src/codebase/extract_features.py \
+  --model mammoclip \
+  --data-dir "$HOME/.code/datasets/rsna/mammo_clip" \
+  --img-dir "train_images_png" \
+  --csv-file "train_folds.csv" \
+  --clip_chk_pt_path "$HOME/.code/model_weights/mammoclip/mammoclip-b5-model-best-epoch-7.tar" \
+  --dataset "RSNA" \
+  --split "all" \
+  --arch "upmc_breast_clip_det_b5_period_n_lp" \
+  --output-file "features/mammoclip_rsna_cancer_features.pt" \
+  --batch-size 16 \
+  --num-workers 4
+
+Usage — CXR-Foundation - Vindr
+-----
+uv run ./src/codebase/extract_features.py \
   --model cxr-foundation \
   --data-dir "$HOME/.code/datasets/vindr-mammo" \
   --img-dir "images_png" \
   --csv-file "vindr_detection_v1_folds.csv" \
   --dataset "ViNDr" \
   --split "all" \
-  --output-file "features/cxr_elixr_features.pt" \
+  --output-file "features/cxr_vindr_abnormal_features.pt" \
   --batch-size 16 \
   --num-workers 4
+
+  Usage — CXR-Foundation - RSNA
+  -----
+  uv run ./src/codebase/extract_features.py \
+    --model cxr-foundation \
+    --data-dir "$HOME/.code/datasets/rsna/mammo_clip" \
+    --img-dir "train_images_png" \
+    --csv-file "train_folds.csv" \
+    --dataset "RSNA" \
+    --split "all" \
+    --output-file "features/cxr_rsna_cancer_features.pt" \
+    --batch-size 16 \
+    --num-workers 4
 
 Notes:
 - The CXR-Foundation backend uses TensorFlow saved_model artifacts which are loaded
@@ -53,11 +81,17 @@ Notes:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
+# Suppress TensorFlow C++ and XLA/ptxas noise before any TF import
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
+
 import numpy as np
 import pandas as pd
+import tensorflow as _tf_init; _tf_init.get_logger().setLevel("ERROR")
 import tensorflow_text as text
 import torch
 from PIL import Image
@@ -367,11 +401,14 @@ class CXRFoundationWrapper:
         self, paths: list[str], device: torch.device = torch.device("cpu")
     ) -> torch.Tensor:
         """
-        Given a list of image file paths, run the TF models in a batch
+        Given a list of image file paths, run the TF models one image at a time
         and return a torch Tensor of shape (B, D).
+
+        ELIXR-C's serving_default signature expects a single serialized TF Example
+        (batch size 1). Passing a batch of N strings produces malformed feature maps.
+        We therefore loop per image, matching the reference cxr-foundation.py usage.
         """
         from PIL import Image as _Image
-        # Assuming torch is imported at the top of your file
 
         tf = self._tf
         np = self._np
@@ -379,47 +416,32 @@ class CXRFoundationWrapper:
         if not paths:
             return torch.empty((0, 0), dtype=torch.float32)
 
-        batch_size = len(paths)
-        serialized_examples = []
+        ids = tf.constant(np.zeros((1, 1, 128), dtype=np.int32))
+        paddings = tf.constant(np.zeros((1, 1, 128), dtype=np.float32))
 
-        # 1. Prepare the batch of serialized TF Examples
+        per_sample_embs = []
         for p in paths:
+            # Load image and encode as a single TF Example (batch_size=1)
             with _Image.open(p) as img:
-                img_gray = img.convert("L")
-                arr = np.array(img_gray)
-            # Assuming _png_to_tfexample is defined elsewhere in your file
+                arr = np.array(img.convert("L"))
             ex = _png_to_tfexample(arr)
-            serialized_examples.append(ex.SerializeToString())
+            serialized_tf = tf.constant([ex.SerializeToString()])  # shape (1,)
 
-        # Create a single TF tensor containing the whole batch of strings
-        # Shape will be (B,)
-        serialized_tf = tf.constant(serialized_examples)
+            # ELIXR-C inference — must be called with exactly one example
+            elixr_output = self._elixrc_infer(input_example=serialized_tf)
+            img_feature = elixr_output["feature_maps_0"]  # (1, 8, 8, 1376)
 
-        # 2. Batched ELIXR-C inference
-        elixr_output = self._elixrc_infer(input_example=serialized_tf)
-        elixr_embedding = elixr_output["feature_maps_0"]
+            # Q-Former inference
+            qformer_output = self._qformer_infer(
+                image_feature=img_feature, ids=ids, paddings=paddings
+            )
 
-        # 3. Batched Q-Former inference
-        # Adjust dummy inputs to match the actual batch size instead of hardcoding '1'
-        ids = tf.constant(np.zeros((batch_size, 1, 128), dtype=np.int32))
-        paddings = tf.constant(np.zeros((batch_size, 1, 128), dtype=np.float32))
+            # all_contrastive_img_emb: (1, 32, 128) → flatten to (4096,)
+            emb_np = np.asarray(qformer_output["all_contrastive_img_emb"].numpy(), dtype=np.float32)
+            per_sample_embs.append(emb_np.reshape(-1))
 
-        qformer_output = self._qformer_infer(
-            image_feature=elixr_embedding, ids=ids, paddings=paddings
-        )
-
-        # 4. Process the output batch
-        emb_np = qformer_output["all_contrastive_img_emb"].numpy()
-        emb_np = np.asarray(emb_np, dtype=np.float32)
-
-        # Handle possible shapes like (B, 1, D) or (B, D)
-        if emb_np.ndim == 3:
-            emb_np = emb_np.reshape(batch_size, -1)
-
-        # Convert the whole batch to a PyTorch tensor at once
-        emb_pt = torch.from_numpy(emb_np)
-
-        return emb_pt
+        emb_np = np.stack(per_sample_embs, axis=0).astype(np.float32)
+        return torch.from_numpy(emb_np)
 
 
 def load_model(clip_chk_pt_path: str, arch: str, device: torch.device) -> BreastClipClassifier:
