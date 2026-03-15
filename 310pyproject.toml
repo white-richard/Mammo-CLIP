@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mammo-clip"
+version = "0.1.0"
+description = "Mammo-CLIP"
+requires-python = "==3.10"
+
+dependencies = [
+    # Deep learning
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "timm",
+    "transformers",
+    "tokenizers",
+    "safetensors",
+    "huggingface-hub",
+    # Image processing & augmentation
+    "albumentations",
+    "imgaug",
+    "opencv-python",
+    "scikit-image",
+    "pillow",
+    "imageio",
+    # Medical imaging
+    "pydicom",
+    "dicomsdl",
+    # Data & ML
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "omegaconf",
+    # Utilities
+    "tqdm",
+    "click",
+    "regex",
+    "packaging",
+    "fsspec",
+    "pydantic",
+    "nltk",
+    # Monitoring
+    "tensorboard",
+    "pynvml",
+    "python-lsp-server",
+    # "pypng>=0.20220715.0",
+    # "tensorflow>=2.17.1",
+    # "tensorflow-text>=2.17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ipython",
+    "matplotlib",
+]
